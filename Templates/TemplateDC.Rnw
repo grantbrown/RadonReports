@@ -214,7 +214,7 @@ cat(paste0("\\item ", State,
 \section{Technical Notes}
 \label{sec:technotessec}
 
-Data on radon tests and mean concentrations was obtained from the CDC National Public Health Environmental Tracking Network via the Tracking API \cite{CDCEpi,mcgeehin2004national}. Census data for housing-unit adjusted comparisons were obtained from the U.S. census via the \texttt{tidycensus} package for R version 4.1.2 \cite{R-cite, R-tidycensus}. Full code and tabular versions of the data are available at {\color{red}{(insert GitHub URL)}}
+Data on radon tests and mean concentrations was obtained from the CDC National Public Health Environmental Tracking Network via the Tracking API \cite{CDCEpi,mcgeehin2004national}. Census data for housing-unit adjusted comparisons were obtained from the U.S. census via the \texttt{tidycensus} package for R version 4.1.2 \cite{R-cite, R-tidycensus}. Full code and tabular versions of the data are available at \href{https://github.com/grantbrown/RadonReports}{GitHub}.
 
 
 <<echo = FALSE, results = "asis">>=
