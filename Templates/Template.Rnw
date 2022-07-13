@@ -1,0 +1,513 @@
+\documentclass[14pt]{extarticle}
+\usepackage{graphicx}
+\usepackage{color}
+\usepackage{framed}
+\usepackage{float}
+\usepackage{geometry}
+\usepackage{multicol}
+\usepackage{wrapfig}
+\usepackage{tikz}
+\usepackage{calc}
+\setlength\intextsep{0pt}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{colortbl}
+\usepackage{hyperref}
+\usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage{makecell}
+\usepackage[backend=bibtex,style=numeric,sorting=none]{biblatex}
+\hypersetup{
+  colorlinks=true,
+  linkcolor=blue!50!red,
+  urlcolor=blue!70!red
+}
+\bibliography{../../Bibliography}
+ \geometry{
+ a4paper,
+ total={170mm,257mm},
+ left=20mm,
+ top=20mm,
+ }
+ 
+\begin{document}
+
+<<label="block1",echo=FALSE, warning = FALSE, message = FALSE, results = "hide">>=
+if (!exists("GLOBAL_SEED")){
+  stop("GLOBAL_SEED  not found!")
+}else if(is.character(GLOBAL_SEED)){
+  GLOBAL_SEED <- as.numeric(GLOBAL_SEED)
+}
+
+# Define Helper Functions:
+cfy_sgl <- function(x){
+  if (!any(c("numeric", "integer", 
+             "character") %in% class(x))){
+    stop("Can't commafy class:", class(x))
+  }
+  
+  xch <- format(x, scientific=FALSE)
+  if (grepl(".", xch,fixed=TRUE)){
+    spl <- strsplit(xch, split = ".", fixed = TRUE)
+    decimalpart <- paste0(".", spl[[1]][2])
+    xch <- spl[[1]][1]
+  } else{
+    decimalpart <- ""
+  }
+    
+  chars <- strsplit(xch, split = "")[[1]]
+  addcomma <- rev(1:length(chars))%%3==0
+  addcomma[1] <- FALSE
+  paste0(paste0(paste0(
+    ifelse(addcomma, ",",""), chars), collapse = ""), decimalpart)
+}
+commafy <- function(inp){
+  sapply(inp, cfy_sgl)
+}
+
+standardRatio <- function(x,n,units,digits=0,special=TRUE){
+  numout <- round(x/n*units,digits)
+  out <- commafy(numout)
+  if (!special){
+    return(out)
+  } else{
+    if (numout == 0){
+      return("\\textless 1")
+    } else if(numout == units){
+      return(paste0(">",units-1))
+    }
+    return(out)
+  }
+}
+
+# Creating directory to store plots if it doesn't exist
+if (!dir.exists("./Plots")){
+  dir.create("./Plots")
+}
+
+# Save information in environment for reproducibility/testing
+save(list = ls(), file = "envir.rda", compress = "bzip2")
+
+set.seed(GLOBAL_SEED)
+
+## Creating variable to indicate if a county has < 10 tests or no tests
+Data <- mutate(AllData, STATEFP = substr(geoId, 1, 2)) |>
+        filter(as.numeric(STATEFP) == GLOBAL_SEED) |>
+        mutate(LowData = case_when(
+                                RawCounts < 10 ~ "< 10 Tests",
+                                RawCounts == 0 ~ "No Tests",
+                                is.na(RawCounts) ~ "No Tests",
+                                TRUE ~ ">= 10 Tests"))
+
+## Scaling need metrics
+Data <- mutate(Data, SmoothNeed = 100 * (SmoothNeed - Scales$Smoothed$Min) / 
+                    (Scales$Smoothed$Max - Scales$Smoothed$Min))
+TableOutput <- select(Data, Name, Households, RawNeed, SmoothNeed, 
+                      RawMean, SmoothMean, RawCounts, SmoothCounts)
+colnames(TableOutput) <- c("County Name", "Households", 
+                           "Raw Need", "Smoothed Need", 
+                           "Raw Mean Radon Level",
+                           "Smoothed Mean Radon Level",
+                           "Raw Test Count", 
+                           "Smoothed Test Count")
+
+write.csv(TableOutput, "SummaryTable.csv", quote=FALSE, row.names = FALSE)
+
+## Creating temporal for current state
+Temporal <- paste0(Temporals$MinTemporal[which(Temporals$geoId == GLOBAL_SEED)],
+                   "-", 
+                   Temporals$MaxTemporal[which(Temporals$geoId == GLOBAL_SEED)])
+
+# Raw maps
+## Counts
+Log1pMap(Data$Households, Data$geoId, Data$LowData, 
+          "Households", 0, 
+          "Plots/RawHouseholds.pdf",
+          Width = 6, Height = 6)
+
+Log1pMap(Data$RawCounts, Data$geoId, Data$LowData, "Number of Tests", 0, 
+          "Plots/RawTotal.pdf",
+          Width = 6, Height = 6)
+
+Log1pMap(Data$RawPositive, Data$geoId, Data$LowData, 
+          "Number of Positive Tests", 0, 
+          "Plots/RawPositive.pdf",
+          Width = 6, Height = 6)
+
+## Means
+#if(State == "Texas"){
+Log1pMap(Data$RawMean, Data$geoId, Data$LowData, 
+        "picoCuries per liter", 1, "Plots/RawMeans.pdf",
+        Width = 6, Height = 6)
+# }else{
+#   RegularMap(Data$RawMean, Data$geoId, Data$LowData, 
+#         "picoCuries per liter", 1, "Plots/RawMeans.pdf",
+#         Width = 6, Height = 6)
+# }
+
+## Rates
+Log1pMap(Data$RawPositive / Data$RawCounts, Data$geoId, Data$LowData, 
+          "Positive Testing Rate", 4, "Plots/RawPositiveRate.pdf",
+          Width = 6, Height = 6)
+
+Log1pMap(Data$RawCounts / Data$Households * 1000, Data$geoId, Data$LowData, 
+          "Radon tests per\n1k housing units", 1, "Plots/RawTestingRate.pdf",
+          Width = 6, Height = 6)
+
+## Need metrics
+Log1pMap(Data$RawNeed, 
+              Data$geoId, Data$LowData, "Need to Test\n(arbitrary scale)", 1, 
+              "Plots/RawNeedToTest.pdf",
+              Width = 6, Height = 6)
+
+
+# Smoothed maps
+## Counts
+Log1pMap(Data$SmoothCounts, Data$geoId, Data$LowData, 
+          "Number of Tests", 0, "Plots/SmoothedTotal.pdf",
+          Width = 6, Height = 6)
+
+## Means
+# if(State == "Texas"){
+Log1pMap(Data$SmoothMean, Data$geoId, Data$LowData, 
+        "picoCuries per liter", 1, "Plots/SmoothedMeans.pdf",
+        Width = 6, Height = 6)
+# }else{
+#   RegularMap(Data$SmoothMean, Data$geoId, Data$LowData, 
+#         "picoCuries per liter", 1, "Plots/SmoothedMeans.pdf",
+#         Width = 6, Height = 6)
+# }
+
+## Rates
+Log1pMap(Data$SmoothCounts / Data$Households * 1000, 
+          Data$geoId, Data$LowData, 
+          "Radon tests per\n1k housing units", 1, 
+          "Plots/SmoothedTestingRate.pdf",
+          Width = 6, Height = 6)
+
+## Need Metrics
+Log1pMap(ifelse(Data$SmoothNeed > 100, 100, Data$SmoothNeed), 
+              Data$geoId, Data$LowData, "Need to Test\n(arbitrary scale)", 1,
+              "Plots/SmoothedNeedToTest.pdf",
+              Width = 6, Height = 6)
+
+@
+
+\begin{titlepage}
+   \begin{center}
+       \vspace*{5cm}
+      {\Large{
+      <<echo = FALSE, results = "asis">>=
+
+cat(paste0("\\textbf{Radon Undertesting Report: ", State, "}\\\\"))
+
+@
+       }}
+       \vspace{0.5cm}
+      {\large{ 
+ <<echo = FALSE, results = "asis">>=     
+cat(paste0("Radon and Radon Testing in the State of ", State, "\\\\"))
+
+@
+	      }}   
+       \vspace{2cm}
+    
+       \vfill
+
+       Report Generated: 
+ <<echo = FALSE, results = "asis">>=     
+cat(paste0(as.character(Sys.Date()), "\\\\"))
+@
+       \vspace{0.8cm}
+       \includegraphics[width=0.4\textwidth]{./ala.jpg}
+            
+            
+   \end{center}
+\end{titlepage}
+
+
+\section{Introduction}
+
+The U.S. Environmental Protection Agency (EPA) estimates that radon exposure is responsible for 21,000 lung cancer deaths each year in the United States (U.S.) \cite{RWF1}. Radon is the leading cause of lung cancer among individuals who have never smoked and the second leading cause of lung cancer overall in the U.S. 
+
+
+{\bf{The EPA recommends that all homes be tested for radon and mitigated if the radon concentration is 4 picocuries per liter (pCi/L) or higher}}.  Because protracted radon exposure at concentrations less than 4 pCi/L also poses a risk, the EPA also recommends homeowners consider reducing the radon concentrations for homes measuring between 2 pCi/L and 4 pCi/L \cite{RWF2}.
+
+
+\begin{wrapfigure}{l}{8cm+.6666em+.8pt}
+\begin{tikzpicture}[every node/.style={draw,text width=8cm,minimum width=8cm}]
+\node {
+Even though some counties exhibit relatively lower radon averages, it is important that all homes be tested since radon concentrations greatly exceeding the EPA's Radon Action Level have been reported in homes and other buildings in many of these ``lower" radon counties.
+};
+\end{tikzpicture}
+\end{wrapfigure}
+
+Indoor radon concentrations vary substantially, both within and between counties, in the U.S.  The primary cause of the geographic variation in radon is the geologic radon source strength and soil permeability within a geographic area.  Some of the secondary causes of geographic radon variation include differences in home construction, HVAC type, and occupant behavior (e.g., opening windows) \cite{RWF3}.  The rate of residential radon testing also varies widely within and between U.S. counties.  
+
+This report is one of a set of state-by-state reports that attempts to provide a basic summary of U.S. publicly available radon testing data, provided by the Centers for Disease Control and Prevention (CDC), to illustrate the testing rate in U.S. counties, the average radon concentration reported, and a combined ``Need To Test" measure developed by the American Lung Association to highlight areas with both higher radon concentrations and lower testing rates within each state. 
+
+There is clearly no singular way to prioritize these multifaceted aspects of radon testing, but we hope the Need To Test presented here provides a meaningful summary for policymakers, and the public alike. In addition, publicly available data on radon testing are often sparse, with some areas reporting few to no radon tests during the period over which data are available. To provide meaningful maps, we apply a smoothing model to borrow strength from neighboring counties within the same state. As radon levels can vary widely at finer geographic scales, we denote counties which had no data, or those which had fewer than 10 tests during the data availability period. 
+
+
+<<echo = FALSE, results = "asis">>=
+cat(paste0(" The study period for ", State, " was from ", Temporal, "."))
+@ 
+
+
+\section{Using This Document}
+
+Public health professionals interested primarily in the large scale distribution of radon levels in their state should focus on Figure \ref{fig:means}. Those interested in testing rates should focus on Figure \ref{fig:testrate}. For a combined measure that highlights relatively fewer tests and also higher radon levels, Figure \ref{fig:utest1} gives a summary. In all cases, caution is required in interpreting the results due to the issues highlighted in Section \ref{sec:technotessec}.
+
+
+
+<<echo = FALSE, results = "asis">>=
+
+cat(paste0("\\section{Quick Facts: Radon in ", State, "}"))
+
+@
+
+\begin{itemize}
+
+<<echo = FALSE, results = "asis">>=
+Data_at_least_10 <- Data[which(Data$RawCounts >= 10),]
+maxIdx <- which.max(Data_at_least_10$RawMean)
+cat(paste0("\\item Among counties with at least 10 reported tests, the highest average radon concentration was observed in ", 
+           Data_at_least_10$Name[maxIdx], " with an estimated mean radon level of ",
+           round((Data_at_least_10$RawMean)[maxIdx], 1),
+           " pCi/L."))
+
+@
+
+<<echo = FALSE, results = "asis">>=
+minIdx <- which.min(Data_at_least_10$RawMean)
+cat(paste0("\\item Among counties with at least 10 reported tests, the lowest mean radon level was observed in ", 
+           Data_at_least_10$Name[minIdx], " with an estimated mean radon level of ",
+           round((Data_at_least_10$RawMean)[minIdx], 1),
+           " pCi/L."))
+
+@
+
+<<echo = FALSE, results = "asis">>=
+minIdx <- which.min(Data$RawCounts/Data$Households)
+maxIdx <- which.max(Data$RawCounts/Data$Households)
+cat(paste0("\\item Testing rates per home vary, with the lowest estimated rates in ", 
+           Data$Name[minIdx], 
+           " (", standardRatio(Data$RawCounts[minIdx], 
+                               Data$Households[minIdx],
+                               1000), " per 1k housing units), and the highest estimated rates in ",
+           Data$Name[which.max(Data$RawCounts/Data$Households)], " (", standardRatio(Data$RawCounts[maxIdx],
+                                                                                     Data$Households[maxIdx],
+                                                                                     1000), " per 1k housing units)."))
+
+@
+ 
+<<echo = FALSE, results = "asis">>=
+
+cat(paste0("\\item The county with the most tests is ", 
+           Data$Name[which.max(Data$RawCounts)], " with ",
+           commafy(max(Data$RawCounts, na.rm = TRUE))," tested homes and an estimated mean 
+           radon level of ",
+           round((Data$RawMean)[which.max(Data$RawCounts)], 1), 
+           " pCi/L."))
+
+@ 
+
+<<echo = FALSE, results = "asis">>=
+
+# State-wide mean is a weighted average of county means and number of housing units
+cat(paste0("\\item ", State, " has an estimated ", commafy(sumNA(Data$Households)), 
+           " total homes with ", commafy(sumNA(Data$RawCounts)), 
+           " tests during the study period. Overall, ",State,
+           " has an estimated mean radon level of ", 
+           round(sumNA(Data$RawMean * Data$Households) / sumNA(Data$Households), 1), 
+           " pCi/L."))
+
+@ 
+\end{itemize}
+
+\graphicspath{{./Plots/}}
+
+\pagebreak
+
+<<echo = FALSE, results = "asis">>=
+
+cat(paste0("\\section{Mapping Radon in ", State, "}"))
+
+@
+
+Radon levels vary geographically, both at large scales (state to state, county to county) and at even finer scales. In Figure \ref{fig:means} we see an illustration of this distribution for 
+<<echo = FALSE, results = "asis">>=
+
+#cat(paste0(State, "."))
+
+out <- paste0(State, ". ")
+
+out <- paste0(out, "Specifically, this figure shows the mean radon level across all the tests reported during the period for which data are available. This map shows a general, overall level of risk in an area without specifically considering the housing environment. ")
+
+if (any(Data$RawCounts < 10)){
+  out <- paste0(out, "The counties that are marked with a circle have less than 10 total radon tests. ")
+}
+if (any(is.na(Data$RawCounts) | any(Data$RawCounts == 0, na.rm = TRUE))){
+  out <- paste0(out, "Counties that are marked with a diamond have no recorded radon tests.\n ")
+}
+cat(out)
+
+@
+
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.65\linewidth]{SmoothedMeans.pdf}
+  \caption{Smoothed mean radon level by county over all reported tests.\label{fig:means}}
+\end{figure}
+
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.65\linewidth]{SmoothedTestingRate.pdf}
+  \caption{Smoothed number of radon tests per 1,000 housing units by county.\label{fig:testrate}}
+\end{figure}
+
+
+\vspace{0.1in}
+
+
+In addition to radon levels, radon testing rates vary widely throughout the state. Figure \ref{fig:testrate} shows an estimated 
+testing rate, comparing the number of reported tests to the number of housing units estimated by the U.S. Census. Given the variety of 
+radon testing approaches and the complexity of determining what proportion of radon tests end up being reported to the 
+CDC database, the absolute units here are of less interest and relevance than the relative rates between counties. 
+
+
+\begin{center}
+\begin{figure}[H]
+  \includegraphics[width=\linewidth]{SmoothedNeedToTest.pdf}
+  \caption{Smoothed Need to Test metric by county. \label{fig:utest1}}
+\end{figure}
+\end{center}
+
+Finally, Figure \ref{fig:utest1} shows a combined measure which attempts to capture the need to perform additional Radon tests in a given county. This Need to Test metric is designed to show high values for areas with high radon concentration, as well as low testing rates. The highest values are observed in areas with both - indicating that more tests are needed. It is also important to consider 
+the radon concentrations and testing rates separately, but the Need to Test metric offers a quick visual way to highlight the areas where more testing could be the most beneficial. 
+
+\section{Technical Notes}
+\label{sec:technotessec}
+Data on radon tests and mean concentrations was obtained from the CDC National Public Health Environmental Tracking Network via the Tracking API \cite{CDCEpi,mcgeehin2004national}. Census data for housin-unit adjusted comparisons were obtained from the U.S. census via the \texttt{tidycensus} package for R version 4.1.2 \cite{R-cite, R-tidycensus}. Full code and tabular versions of the data are available at {\color{red}{(insert GitHub URL)}}
+
+
+<<echo = FALSE, results = "asis">>=
+
+### Calculating duration of study period
+years <- gsub("(.+)-(.+)", "\\2", Temporal) |> as.numeric() - gsub("(.+)-(.+)", "\\1", Temporal) |> as.numeric() + 1
+
+### Printing off time period and date accessed
+cat(paste0("Radon data were collected from ", Temporal, " for the measures: Mean pre-mitigation radon level in tested buildings and Number of pre-mitigation radon tests by radon level over ", years, " years. Data was accessed on ", DateAccessed, "."))
+
+@
+
+
+In general, data used were those as reported by testing laboratories voluntarily participating in the CDC's radon data collection and mapping effort. Where laboratory data were unavailable, data as reported by states to CDC were used for this analysis.
+
+To deal with sparsity, smoothing was applied to Figures \ref{fig:means}, \ref{fig:testrate}, and \ref{fig:utest1}, so these maps illustrate large, regional variation in testing rates and radon levels. The model used for smoothing is a Bayesian Intrinsic Conditional Autoregressive (ICAR) spatial model, implemented with Nimble \cite{nimble2021a}. 
+
+The selected Need to Test metric is $R*log_{10}(\frac{H}{N})$ where R is the mean radon level, H is the number of housing units, and N is the number of Radon tests, adjusted to reflect the expected number of tests per 10 year period. As this metric increases, it indicates a greater need to test. The values shown in Figure \ref{fig:utest1} are scaled so that the lowest value of the Need to Test metric in the U.S. is 0 and the largest value is 100, with need values above 25\% of the national maximum capped at 100 to prevent outliers from dominating the scale. This approach can help highlight areas which may have a higher need for testing than others, but there are substantial limitations, and policy should not be based on this document in isolation. In addition to the presence of unaccounted-for-small-scale variability within states, comparisons between states may be affected by differential
+data availability. In addition, the Need to Test metric presented here describes one of many possible prioritization schemes for trading off radon levels and testing rates. Alternative approaches may strike a different balance between these two measures, or prioritize high or low population areas. Direct interpretation of the units presented here is also limited, and is intended to support relative comparisons. 
+
+
+\pagebreak
+
+\section{State Rankings}
+
+<<echo = FALSE>>= 
+
+# Creating table with all states
+## State-wide need metrics are a weighted average of county need metrics and housing units
+## The same is true for the means
+TableData <- mutate(AllData, STATEFP = substr(geoId, 1, 2)) |>
+             group_by(STATEFP)|>
+             summarize(across(c(Households, RawCounts, SmoothCounts, RawPositive), 
+                              list("Sum" = sumNA)),
+                       RawMean = sumNA(RawMean * Households) /
+                                 sumNA(Households),
+                       SmoothNeed = sumNA(SmoothNeed * Households) /
+                                    sumNA(Households)) |>
+             inner_join(States, by = "STATEFP")
+
+## Sorting dataset and placing columns in desired order
+SmoothNeedTable <- arrange(TableData, desc(SmoothNeed)) |>
+  mutate(Rank = row_number(), rate = RawCounts_Sum / Households_Sum,
+         SmoothNeed = round(SmoothNeed, digits = 1),
+         RawMean = round(RawMean, digits = 1),
+         rate = round(1000 * rate, digits = 1),
+         Household_Fmt = commafy(Households_Sum),
+         RawCounts_Fmt = commafy(RawCounts_Sum)) |>
+  ungroup() |>
+  select(NAME, Rank, SmoothNeed, RawMean, Household_Fmt, RawCounts_Fmt, rate)
+
+## Finding rank of current state
+CurRank <- filter(SmoothNeedTable, NAME == State)
+
+## Making table
+kbl(SmoothNeedTable, format = "latex", 
+                  col.names = linebreak(c("State", "Rank", 
+                                   "Weighted Average\nSmoothed Need to Test",
+                                               "Estimated Mean\nRadon Level", 
+                                               "Households",
+                                               "Radon Tests\n (10 years)",
+                                               "Radon Tests per\n1,000 Households")), 
+    escape = F,align=c("l", "r", "r", "r", "r", "r","r"), 
+    caption="State-level summary data. Note: Hawaii and Mississippi are excluded due to lack of data.") |>
+  kable_styling(latex_options = c("hold_position", "scale_down"), full_width = FALSE) |>
+  row_spec(CurRank$Rank, background = "yellow")
+
+@
+
+
+\pagebreak
+
+
+
+\section{Appendix: Supplemental Figures}
+
+This section contains additional maps which may be of interest, including raw (non-smoothed) maps of radon levels, estimated number of housing units, and testing rates.  For mapping of raw data, counties with no data during the study period are shaded in gray.
+
+
+\begin{figure}[H] 
+  \begin{minipage}[b]{0.38\linewidth}
+  \includegraphics[width=\linewidth]{RawHouseholds.pdf}
+  \caption{Raw Number of housing units by county.\label{ fig7} }
+  \end{minipage}  
+  \begin{minipage}[b]{0.38\linewidth}
+  \includegraphics[width=\linewidth]{RawTotal.pdf}
+  \caption{Raw number of radon tests by county.} 
+  \end{minipage}  
+  \begin{minipage}[b]{0.38\linewidth}
+  \includegraphics[width=\linewidth]{RawMeans.pdf}
+  \caption{Raw Mean radon level by county.}  
+  \end{minipage} 
+  \begin{minipage}[b]{0.38\linewidth}
+  \includegraphics[width=\linewidth]{RawTestingRate.pdf}
+  \caption{Raw number of radon tests per 100,000 housing units by county.}
+  \end{minipage}  
+  \begin{minipage}[b]{0.38\linewidth}
+  \includegraphics[width=\linewidth]{RawNeedToTest.pdf}
+  \caption{Raw Need to Test metric (unscaled) by county.}
+  \end{minipage}
+  \hfill
+  \begin{minipage}[b]{0.38\linewidth}
+  \includegraphics[width=\linewidth]{SmoothedTotal.pdf}
+  \caption{Smoothed number of Radon tests by county.}
+  \end{minipage} 
+\end{figure}
+
+\pagebreak
+
+\section{Disclaimer}
+
+This document was prepared on behalf of the American Lung Association by researchers at the University of Iowa. This project has been funded wholly or in part by the United States Environmental Protection Agency under assistance agreement 83924601 to the American Lung Association. The data presented here were provided by the United States Centers for Disease Control and the U.S. Census Bureau. The summaries and text presented here was not endorsed or approved by the EPA, CDC, or Census Bureau. 
+
+
+\pagebreak
+
+\nocite{*}
+\printbibliography{}
+
+\end{document}

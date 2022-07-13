@@ -1,0 +1,26 @@
+---
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## State Report List
+```{r, results='asis', echo=FALSE}
+# Get a list of the pdfs
+
+files <- dir("./Results/")
+raw_files <- files[grepl("pdf", files, fixed = TRUE)]
+
+
+cat("<ol>\n")
+for (stateRpt in raw_files){
+  cat("<li>")
+  state <- gsub(".pdf", "", gsub("report_for_", "", stateRpt), fixed=TRUE)
+  cat(paste0("<a href=\"./Results/", stateRpt, "\">", state, "</a>"))
+  cat("</li>\n")
+}
+cat("</ol>\n")
+
+```
