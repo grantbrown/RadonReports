@@ -18,7 +18,9 @@ cat("<ol>\n")
 for (stateRpt in raw_files){
   cat("<li>")
   state <- gsub(".pdf", "", gsub("report_for_", "", stateRpt), fixed=TRUE)
-  cat(paste0("<a href=\"./Results/", stateRpt, "\">", state, "</a>"))
+  cat(paste0("<a href=\"./Results/", stateRpt, "\">", state, "</a> &nbsp;&nbsp;"))
+  csv <-  paste0("./Results/", state, "/SummaryTable.csv")
+  cat(paste0("<a href=\"", csv, "\">(raw table)</a>"))
   cat("</li>\n")
 }
 cat("</ol>\n")

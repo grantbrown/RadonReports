@@ -1,4 +1,5 @@
 library(knitr)
+library(coda)
 library(jsonlite)
 library(tigris)
 library(viridis)
@@ -185,10 +186,18 @@ Counties <- counties(cb = T, class = "sf", year = 2018) |>
 ## Digits is used for digits to round to
 
 Log1pMap <- function(Data, FIPS, LowData, Title, Digits, Name,
-                      Width, Height){
+                      Width, Height,truncate = TRUE){
+  
   
   Data1 <- data.frame("Values" = Data, "GEOID" = FIPS, 
                       "LowData" = LowData)
+  
+  # Detect if we're in a state with insufficient data
+  if (truncate && mean(LowData %in% c("No Tests", "< 10 Tests")) >= 0.6 &&  
+    mean(LowData %in% c("No Tests")) >= 0.3){
+    Data1$Values[Data1$LowData == "No Tests"] <- NA
+  }
+  
   
   ### It is necessary to round digits before plotting for the legend
   ### If the largest value is rounded up for the legend but not the data, then it will not appear on the legend
@@ -199,9 +208,9 @@ Log1pMap <- function(Data, FIPS, LowData, Title, Digits, Name,
   
   
   plot <- ggplot(PlotData, aes(fill = Values, geometry = geometry)) + geom_sf() +
-    geom_point(data = filter(PlotData, LowData!= ">= 10 Tests"), 
-               aes(shape = LowData), fill = "black", color = "white", 
-               stat = "sf_coordinates") + 
+    geom_point(data = filter(PlotData, LowData != ">= 10 Tests"), 
+               aes(shape = LowData), fill = "white", color = "black", 
+               stat = "sf_coordinates") +
     scale_fill_viridis_c(trans = "log1p", 
                          breaks = function(x){
                            Breaks <- seq(log1p(min(x,na.rm=TRUE)), 
@@ -224,9 +233,10 @@ Log1pMap <- function(Data, FIPS, LowData, Title, Digits, Name,
                          },
                          limits = function(x){c(floor(min(x, na.rm=TRUE)), ceiling(max(x, na.rm=TRUE)))}
                          ) + 
-    scale_shape_manual(values = c(21, 23), name = "Tests", 
+    scale_shape_manual(values = c(16, 23), name = "Tests", 
                        guide = guide_legend(order = 1, 
                                             override.aes = list(size = 4))) +
+    scale_color_manual(values=c("#000000", "#FFFFFF")) + 
     labs(fill = Title) +  
     theme_void()
   
@@ -236,11 +246,15 @@ Log1pMap <- function(Data, FIPS, LowData, Title, Digits, Name,
 
 ## Makes map with regular scale
 RegularMap <- function(Data, FIPS, LowData, Title, Digits, Name, 
-                    Width, Height){
+                    Width, Height, truncate = TRUE){
   
   Data1 <- data.frame("Values" = Data, "GEOID" = FIPS, 
                       "LowData" = LowData)
-  
+  # Detect if we're in a state with insufficient data
+  if (truncate && mean(LowData %in% c("No Tests", "< 10 Tests")) >= 0.6 &&  
+      mean(LowData %in% c("No Tests")) >= 0.3){
+    Data1$Values[Data1$LowData == "No Tests"] <- NA
+  }
   ### It is necessary to round digits before plotting for the legend
   ### If the largest value is rounded up for the legend, then it will not appear on the legend
   ### The same is true for the smallest value, but if it instead rounded down
@@ -252,8 +266,8 @@ RegularMap <- function(Data, FIPS, LowData, Title, Digits, Name,
   
   plot <- ggplot(PlotData, aes(fill = Values, geometry = geometry)) + geom_sf() + 
     geom_point(data = filter(PlotData, LowData!= ">= 10 Tests"), 
-               aes(shape = LowData), fill = "black", color = "white", 
-               stat = "sf_coordinates") + 
+               aes(shape = LowData), fill = "white", color = "black", 
+               stat = "sf_coordinates") +
     scale_fill_viridis_c(breaks = function(x){
       round(seq(min(x,na.rm=TRUE), max(x,na.rm=TRUE), length.out = 5), 
             digits = Digits)},
@@ -262,9 +276,10 @@ RegularMap <- function(Data, FIPS, LowData, Title, Digits, Name,
                        digits = Digits)
       },
       limits =function(x){c(floor(min(x, na.rm=TRUE)), ceiling(max(x, na.rm=TRUE)))}) + 
-    scale_shape_manual(values = c(21, 23), name = "Tests", 
+    scale_shape_manual(values = c(16, 23), name = "Tests", 
                        guide = guide_legend(order = 1, 
                                             override.aes = list(size = 4))) +
+    scale_color_manual(values=c("#000000", "#FFFFFF")) + 
     labs(fill = Title) +   
     theme_void()
   
@@ -433,34 +448,50 @@ GetScales <- function(States, KeepModels, KeepScales){
         constants$L <- length(NimbleData$adj)
         constants$N <- N
         constants$Households <- DataInd$Households
-        constants$expected_overall <- (sum(DataInd$TotalScaled/DataInd$Households, na.rm=TRUE) / 
+        constants$expected_overall <- (sum(DataInd$TotalScaled, na.rm=TRUE) / 
                                          sum(DataInd$Households[!is.na(DataInd$TotalScaled)]))*DataInd$Households
         inits <- list(tau1 = 1, tau2 = 1, s1 = rep(0, N), s2 = rep(0, N))
         data <- list(Total = round(as.numeric(DataInd$TotalScaled)), Mean = as.numeric(DataInd$Mean))
-        
-        Results <- nimbleMCMC(code, constants, data, inits, nchains = 1, niter = 1000, 
-                              summary = TRUE, WAIC = FALSE, 
-                              monitors = c("MeanEst", "TotEst", "NeedToTest"))
+
+        for (itrs in c(10000,20000,50000)){
+          
+          Results <- nimbleMCMC(code, constants, data, inits, nchains = 3, niter = itrs, 
+                                summary = TRUE, WAIC = FALSE, 
+                                monitors = c("MeanEst", "TotEst", "NeedToTest"))
+          
+          mcl <- as.mcmc.list(
+            lapply(Results$samples, function(cn){
+              as.mcmc(log(cn[,startsWith(colnames(cn), "MeanEst") | startsWith(colnames(cn), "TotEst")]))
+            }
+            ))
+          # Transform on log scale
+          gd <- gelman.diag(mcl, multivariate = FALSE)
+          if (max(gd$psrf[,1]) <= 1.2){
+            break
+          }
+        }
+        if (max(gd$psrf[,1]) > 1.2){
+          stop("State: ", State, " did not satisfactorally converge for spatial model.")
+        }
         
         save(list = c("Results"), file = paste0("./Results/", State, "/", State, ".rda"), compress = "bzip2")
-        Summary <- Results$summary
       }
       
       ### Getting smoothed values
       ### Smoothed values for counties with 0 neighbors are their raw values
       SmoothNeedToTest <- Data$NeedToTest
       
-      SmoothNeedToTest[ind] <- Summary[substring(rownames(Summary), 1, 10) == "NeedToTest", 1]
+      combined_chains <- Reduce("rbind", lapply(Results$samples, function(smpl){smpl[(floor(nrow(smpl)/2):nrow(smpl)),]}))
       
+      SmoothNeedToTest[ind] <- apply(combined_chains[,startsWith(colnames(combined_chains), "NeedToTest")], 2, median)
       SmoothMean <- Data$Mean
       
-      SmoothMean[ind] <- Summary[substring(rownames(Summary), 1, 4) == "Mean", 1]
+      SmoothMean[ind] <- apply(combined_chains[,startsWith(colnames(combined_chains), "MeanEst")], 2, median)
       
       SmoothCounts <- Data$TotalScaled
       
-      SmoothCounts[ind] <- Summary[substring(rownames(Summary), 1, 3) == "Tot", 1]
+      SmoothCounts[ind] <- apply(combined_chains[,startsWith(colnames(combined_chains), "TotEst")], 2, median)
       
-      ### Changing min or max smoothed need metric scales if we have encountered a new min or max
       Scales$Smoothed$Min <- min(Scales$Smoothed$Min, min(SmoothNeedToTest, na.rm = TRUE), 
                                  na.rm = TRUE)
       
@@ -674,31 +705,51 @@ GetScales <- function(States, KeepModels, KeepScales){
         constants$L <- length(NimbleData$adj)
         constants$N <- N
         constants$Households <- DataInd$Households
-        constants$expected_overall <- (sum(DataInd$TotalScaled/DataInd$Households, na.rm=TRUE) / 
+        constants$expected_overall <- (sum(DataInd$TotalScaled, na.rm=TRUE) / 
                                          sum(DataInd$Households[!is.na(DataInd$TotalScaled)]))*DataInd$Households
         inits <- list(tau1 = 1, tau2 = 1, s1 = rep(0, N), s2 = rep(0, N))
         data <- list(Total = round(as.numeric(DataInd$TotalScaled)), Mean = as.numeric(DataInd$Mean))
         
-        Results <- nimbleMCMC(code, constants, data, inits, nchains = 1, niter = 1000, 
-                              summary = TRUE, WAIC = FALSE, 
-                              monitors = c("MeanEst", "TotEst", "NeedToTest"))
         
+        # Try a few number of samples until convergence
+        
+        for (itrs in c(10000,20000,50000)){
+        
+          Results <- nimbleMCMC(code, constants, data, inits, nchains = 3, niter = itrs, 
+                                summary = TRUE, WAIC = FALSE, 
+                                monitors = c("MeanEst", "TotEst", "NeedToTest"))
+          
+          mcl <- as.mcmc.list(
+            lapply(Results$samples, function(cn){
+            as.mcmc(log(cn[,startsWith(colnames(cn), "MeanEst") | startsWith(colnames(cn), "TotEst")]))
+            }
+            ))
+          # Transform on log scale
+          gd <- gelman.diag(mcl, multivariate = FALSE)
+          if (max(gd$psrf[,1]) <= 1.2){
+            break
+          }
+        }
+        if (max(gd$psrf[,1]) > 1.2){
+          stop("State: ", State, " did not satisfactorally converge for spatial model.")
+        }
         save(list = c("Results"), file = paste0("./Results/", State, "/", State, ".rda"), compress = "bzip2")
-        Summary <- Results$summary
+        
       }
       ### Getting smoothed values
       ### Smoothed vales for counties with 0 neighbors are their raw values
       SmoothNeedToTest <- Data$NeedToTest
       
-      SmoothNeedToTest[ind] <- Summary[substring(rownames(Summary), 1, 10) == "NeedToTest", 1]
-      
+      combined_chains <- Reduce("rbind", lapply(Results$samples, function(smpl){smpl[(floor(nrow(smpl)/2):nrow(smpl)),]}))
+
+      SmoothNeedToTest[ind] <- apply(combined_chains[,startsWith(colnames(combined_chains), "NeedToTest")], 2, median)
       SmoothMean <- Data$Mean
-      
-      SmoothMean[ind] <- Summary[substring(rownames(Summary), 1, 4) == "Mean", 1]
+
+      SmoothMean[ind] <- apply(combined_chains[,startsWith(colnames(combined_chains), "MeanEst")], 2, median)
       
       SmoothCounts <- Data$TotalScaled
       
-      SmoothCounts[ind] <- Summary[substring(rownames(Summary), 1, 3) == "Tot", 1]
+      SmoothCounts[ind] <- apply(combined_chains[,startsWith(colnames(combined_chains), "TotEst")], 2, median)
       
       Scales$Smoothed$Min <- min(Scales$Smoothed$Min, min(SmoothNeedToTest, na.rm = TRUE), 
                                  na.rm = TRUE)
@@ -758,8 +809,10 @@ GetScales <- function(States, KeepModels, KeepScales){
 
 # One-time setup code
 if (!exists("CensusData")){
-  if (exists(GLOBAL_CENSUS_API_KEY)){
+  if (exists("GLOBAL_CENSUS_API_KEY")){
     census_api_key(GLOBAL_CENSUS_API_KEY)  
+  } else{
+    stop("Need to set GLOBAL_CENSUS_API_KEY")
   }
   
     
@@ -781,17 +834,39 @@ if (!exists("CensusData")){
     
     for (i in 1:N) {
       ### Total tests
-      TotEst[i] <- pow(10, (s2[i] + nlog10(expected_overall[i])))
+      TotEst[i] <- exp(s2[i] + log(expected_overall[i]))
       Total[i] ~ dpois(TotEst[i])
       
       ### Means
-      MeanEst[i] <- pow(10, (s1[i]))
+      MeanEst[i] <- exp(s1[i])
       Mean[i] ~ dnorm(MeanEst[i], sd = MeanEst[i] / sqrt(TotEst[i]))
       
       
       NeedToTest[i] <- MeanEst[i] * nlog10(Households[i] / TotEst[i])
       
       
+    }
+  }
+  )
+  
+  code_nonspatial <- nimbleCode({
+    tau1 ~ dgamma(.001, .001)
+    tau2 ~ dgamma(.001, .001)
+    mu1 ~ dnorm(0,sd=1)
+    mu2 ~ dnorm(0,sd=1)
+    
+    for (i in 1:N) {
+      s1[i] ~ dnorm(mu1, sd = tau1)
+      s2[i] ~ dnorm(mu2, sd = tau2)
+      ### Total tests
+      TotEst[i] <- exp(s2[i] + log(expected_overall[i]))
+      Total[i] ~ dpois(TotEst[i])
+      
+      ### Means
+      MeanEst[i] <- exp(s1[i])
+      Mean[i] ~ dnorm(MeanEst[i], sd = MeanEst[i] / sqrt(TotEst[i]))
+      
+      NeedToTest[i] <- MeanEst[i] * nlog10(Households[i] / TotEst[i])
     }
   }
   )

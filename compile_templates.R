@@ -40,12 +40,6 @@ load("DateAccessed.rda")
 Temporals <- read.csv("Temporals.csv")
 PlotRatios <- read.csv("PlotRatios.csv")
 
-#library(parallel)
-#cl <- makeCluster(4)
-#clusterExport(cl, varlist = ls(envir=.GlobalEnv))
-#parLapply(cl, 1:length(cl), function(i){source("shared_functions.R")})
-#parLapply(cl,1:nrow(States), function(i){
-
 warning_log <- new.env()
 
 # Creating reports for all states
@@ -79,28 +73,28 @@ for (i in 1:nrow(States)){
     }else if(States$STATEFP[i] == 11){
       # Washington DC
       file.copy("../../Templates/TemplateDC.Rnw", "./template.Rnw", overwrite = TRUE)
-      file.copy("../../Media/ala.jpg", "./ala.jpg")
+      file.copy("../../Media/ala.jpg", "./ala.jpg", overwrite = TRUE)
       knit2pdf(input = "./template.Rnw", 
                output = paste0("./report_for_", compile_env2$State, ".tex"),
                envir = compile_env2)
     }else if(AspectRatio >= .8 && AspectRatio <= 1.25){
       # Theses are considered normal states
       file.copy("../../Templates/Template.Rnw", "./template.Rnw", overwrite = TRUE)
-      file.copy("../../Media/ala.jpg", "./ala.jpg")
+      file.copy("../../Media/ala.jpg", "./ala.jpg", overwrite = TRUE)
       knit2pdf(input = "./template.Rnw", 
                output = paste0("./report_for_", compile_env2$State, ".tex"),
                envir = compile_env2)
     }else if(AspectRatio < .8){
       # These are considered long states
       file.copy("../../Templates/TemplateLong.Rnw", "./template.Rnw", overwrite = TRUE)
-      file.copy("../../Media/ala.jpg", "./ala.jpg")
+      file.copy("../../Media/ala.jpg", "./ala.jpg", overwrite = TRUE)
       knit2pdf(input = "./template.Rnw", 
                output = paste0("./report_for_", compile_env2$State, ".tex"),
                envir = compile_env2)
     }else{
       # These are considered wide states
       file.copy("../../Templates/TemplateWide.Rnw", "./template.Rnw", overwrite = TRUE)
-      file.copy("../../Media/ala.jpg", "./ala.jpg")
+      file.copy("../../Media/ala.jpg", "./ala.jpg", overwrite = TRUE)
       knit2pdf(input = "./template.Rnw", 
                output = paste0("./report_for_", compile_env2$State, ".tex"),
                envir = compile_env2)
@@ -120,6 +114,3 @@ for (i in 1:nrow(States)){
   }
   setwd(cwd)
 }
-### Maybe add Utah to list of states wih log1p maps
-### Currently using natural log, but maybe we should use log base 10?
-#stopCluster(cl)

@@ -16,6 +16,7 @@
 \usepackage{xcolor}
 \usepackage{booktabs}
 \usepackage{makecell}
+\usepackage{setspace}
 \usepackage[backend=bibtex,style=numeric,sorting=none]{biblatex}
 \hypersetup{
   colorlinks=true,
@@ -104,8 +105,8 @@ Data <- mutate(Data, SmoothNeed = 100 * (SmoothNeed - Scales$Smoothed$Min) /
                     (Scales$Smoothed$Max - Scales$Smoothed$Min))
 TableOutput <- select(Data, Name, Households, RawNeed, SmoothNeed, 
                       RawMean, SmoothMean, RawCounts, SmoothCounts)
-colnames(TableOutput) <- c("County Name", "Households", 
-                           "Raw Need", "Smoothed Need", 
+colnames(TableOutput) <- c("County Name", "Housing Units", 
+                           "Raw Testing Disparity", "Smoothed Testing Disparity", 
                            "Raw Mean Radon Level",
                            "Smoothed Mean Radon Level",
                            "Raw Test Count", 
@@ -123,7 +124,7 @@ Temporal <- paste0(Temporals$MinTemporal[which(Temporals$geoId == GLOBAL_SEED)],
 Log1pMap(Data$Households, Data$geoId, Data$LowData, 
           "Households", 0, 
           "Plots/RawHouseholds.pdf",
-          Width = 6, Height = 6)
+          Width = 6, Height = 6, truncate = FALSE)
 
 Log1pMap(Data$RawCounts, Data$geoId, Data$LowData, "Number of Tests", 0, 
           "Plots/RawTotal.pdf",
@@ -154,9 +155,9 @@ Log1pMap(Data$RawCounts / Data$Households * 1000, Data$geoId, Data$LowData,
           "Radon tests per\n1k housing units", 1, "Plots/RawTestingRate.pdf",
           Width = 6, Height = 6)
 
-## Need metrics
+## Testing Disparity metrics
 Log1pMap(Data$RawNeed, 
-              Data$geoId, Data$LowData, "Need to Test\n(arbitrary scale)", 1, 
+              Data$geoId, Data$LowData, "Testing Disparity\n(arbitrary scale)", 1, 
               "Plots/RawNeedToTest.pdf",
               Width = 6, Height = 6)
 
@@ -186,8 +187,8 @@ Log1pMap(Data$SmoothCounts / Data$Households * 1000,
           Width = 6, Height = 6)
 
 ## Need Metrics
-Log1pMap(ifelse(Data$SmoothNeed > 100, 100, Data$SmoothNeed), 
-              Data$geoId, Data$LowData, "Need to Test\n(arbitrary scale)", 1,
+Log1pMap(ifelse(Data$SmoothNeed >= 100, 99.9, Data$SmoothNeed), 
+              Data$geoId, Data$LowData, "Testing Disparity\n(arbitrary scale)", 1,
               "Plots/SmoothedNeedToTest.pdf",
               Width = 6, Height = 6)
 
@@ -199,7 +200,7 @@ Log1pMap(ifelse(Data$SmoothNeed > 100, 100, Data$SmoothNeed),
       {\Large{
       <<echo = FALSE, results = "asis">>=
 
-cat(paste0("\\textbf{Radon Undertesting Report: ", State, "}\\\\"))
+cat(paste0("\\textbf{Radon Testing Disparities: ", State, "}\\\\"))
 
 @
        }}
@@ -244,9 +245,9 @@ Even though some counties exhibit relatively lower radon averages, it is importa
 
 Indoor radon concentrations vary substantially, both within and between counties, in the U.S.  The primary cause of the geographic variation in radon is the geologic radon source strength and soil permeability within a geographic area.  Some of the secondary causes of geographic radon variation include differences in home construction, HVAC type, and occupant behavior (e.g., opening windows) \cite{RWF3}.  The rate of residential radon testing also varies widely within and between U.S. counties.  
 
-This report is one of a set of state-by-state reports that attempts to provide a basic summary of U.S. publicly available radon testing data, provided by the Centers for Disease Control and Prevention (CDC), to illustrate the testing rate in U.S. counties, the average radon concentration reported, and a combined ``Need To Test" measure developed by the American Lung Association to highlight areas with both higher radon concentrations and lower testing rates within each state. 
+This report is one of a set of state-by-state reports that attempts to provide a basic summary of U.S. publicly available radon testing data, provided by the Centers for Disease Control and Prevention (CDC), to illustrate the testing rate in U.S. counties, the average radon concentration reported, and a combined ``Radon Testing Disparity" measure developed by the American Lung Association to highlight areas with both higher radon concentrations and lower testing rates within each state. 
 
-There is clearly no singular way to prioritize these multifaceted aspects of radon testing, but we hope the Need To Test presented here provides a meaningful summary for policymakers, and the public alike. In addition, publicly available data on radon testing are often sparse, with some areas reporting few to no radon tests during the period over which data are available. To provide meaningful maps, we apply a smoothing model to borrow strength from neighboring counties within the same state. As radon levels can vary widely at finer geographic scales, we denote counties which had no data, or those which had fewer than 10 tests during the data availability period. 
+There is clearly no singular way to prioritize these multifaceted aspects of radon testing, but we hope the Testing Disparity presented here provides a meaningful summary for policymakers, and the public alike. In addition, publicly available data on radon testing are often sparse, with some areas reporting few to no radon tests during the period over which data are available. To provide meaningful maps, we apply a smoothing model to borrow strength from neighboring counties within the same state. As radon levels can vary widely at finer geographic scales, we denote counties which had no data, or those which had fewer than 10 tests during the data availability period. 
 
 
 <<echo = FALSE, results = "asis">>=
@@ -290,7 +291,7 @@ cat(paste0("\\item Among counties with at least 10 reported tests, the lowest me
 <<echo = FALSE, results = "asis">>=
 minIdx <- which.min(Data$RawCounts/Data$Households)
 maxIdx <- which.max(Data$RawCounts/Data$Households)
-cat(paste0("\\item Testing rates per home vary, with the lowest estimated rates in ", 
+cat(paste0("\\item Testing rates per housing unit vary, with the lowest estimated rates in ", 
            Data$Name[minIdx], 
            " (", standardRatio(Data$RawCounts[minIdx], 
                                Data$Households[minIdx],
@@ -305,7 +306,7 @@ cat(paste0("\\item Testing rates per home vary, with the lowest estimated rates 
 
 cat(paste0("\\item The county with the most tests is ", 
            Data$Name[which.max(Data$RawCounts)], " with ",
-           commafy(max(Data$RawCounts, na.rm = TRUE))," tested homes and an estimated mean 
+           commafy(max(Data$RawCounts, na.rm = TRUE))," pre-mitigation tests and an estimated mean 
            radon level of ",
            round((Data$RawMean)[which.max(Data$RawCounts)], 1), 
            " pCi/L."))
@@ -316,7 +317,7 @@ cat(paste0("\\item The county with the most tests is ",
 
 # State-wide mean is a weighted average of county means and number of housing units
 cat(paste0("\\item ", State, " has an estimated ", commafy(sumNA(Data$Households)), 
-           " total homes with ", commafy(sumNA(Data$RawCounts)), 
+           " total housing units with ", commafy(sumNA(Data$RawCounts)), 
            " tests during the study period. Overall, ",State,
            " has an estimated mean radon level of ", 
            round(sumNA(Data$RawMean * Data$Households) / sumNA(Data$Households), 1), 
@@ -341,15 +342,23 @@ Radon levels vary geographically, both at large scales (state to state, county t
 #cat(paste0(State, "."))
 
 out <- paste0(State, ". ")
-
+makeZeroNA <- function(x){
+  x[is.na(x)] <- 0
+  x
+}
 out <- paste0(out, "Specifically, this figure shows the mean radon level across all the tests reported during the period for which data are available. This map shows a general, overall level of risk in an area without specifically considering the housing environment. ")
 
 if (any(Data$RawCounts < 10)){
   out <- paste0(out, "The counties that are marked with a circle have less than 10 total radon tests. ")
 }
 if (any(is.na(Data$RawCounts) | any(Data$RawCounts == 0, na.rm = TRUE))){
-  out <- paste0(out, "Counties that are marked with a diamond have no recorded radon tests.\n ")
+  out <- paste0(out, "Counties that are marked with a diamond have no recorded radon tests. ")
 }
+if (mean(makeZeroNA(Data$RawCounts) == 0) >= 0.3 && mean(makeZeroNA(Data$RawCounts) < 10, na.rm=TRUE) >= 0.6){
+  out <- paste0(out, paste0("Counties with no/low data were considered too prevalent in ", State, " for smoothed values to be sufficiently reliable to display. ")) 
+}
+out <- paste0(out, "\n")
+
 cat(out)
 
 @
@@ -378,15 +387,24 @@ radon testing approaches and the complexity of determining what proportion of ra
 CDC database, the absolute units here are of less interest and relevance than the relative rates between counties. 
 
 
-\begin{center}
-\begin{figure}[H]
+\begin{figure}[H] 
+  \begin{minipage}[b]{\linewidth}
   \includegraphics[width=\linewidth]{SmoothedNeedToTest.pdf}
-  \caption{Smoothed Need to Test metric by county. \label{fig:utest1}}
+  \end{minipage}  
+  \begin{minipage}[b]{\linewidth}
+	\begin{tikzpicture}[every node/.style={text width=0.95\linewidth,minimum width=\linewidth}]
+	\node [draw,minimum height=2.2cm,minimum width=4cm] (node1) {};
+	\node [anchor=north west] at (node1.north west) {{\footnotesize{\begin{singlespace}All homes and buildings should be tested for radon. The counties shown on the high end of the Testing Disparity scale call for increased attention, but radon testing in all counties remains an ongoing need. Indoor radon levels vary widely, and elevated concentrations have been reported in many counties with low radon averages.\end{singlespace}
+	}}};
+	\end{tikzpicture}
+  \end{minipage}  
+  \caption{Smoothed Testing Disparity metric by county. \label{fig:utest1}}
 \end{figure}
-\end{center}
+\vspace{0.1in}
 
-Finally, Figure \ref{fig:utest1} shows a combined measure which attempts to capture the need to perform additional Radon tests in a given county. This Need to Test metric is designed to show high values for areas with high radon concentration, as well as low testing rates. The highest values are observed in areas with both - indicating that more tests are needed. It is also important to consider 
-the radon concentrations and testing rates separately, but the Need to Test metric offers a quick visual way to highlight the areas where more testing could be the most beneficial. 
+Finally, Figure \ref{fig:utest1} shows a combined measure - a more nuanced view than considering mean radon level and radon testing rates separately - that attempts to capture which counties might be likelier to benefit from increased attention to radon testing.  This Testing Disparity metric is designed to show higher values for areas with high radon concentration, as well as low testing rates. The highest values are observed in areas with both - indicating that more tests are especially needed. It is also important to consider 
+the radon concentrations and testing rates separately, but the Testing Disparity metric offers a quick visual way to highlight the areas where more attention to testing might be the most beneficial. 
+
 
 \section{Technical Notes}
 \label{sec:technotessec}
@@ -408,8 +426,8 @@ In general, data used were those as reported by testing laboratories voluntarily
 
 To deal with sparsity, smoothing was applied to Figures \ref{fig:means}, \ref{fig:testrate}, and \ref{fig:utest1}, so these maps illustrate large, regional variation in testing rates and radon levels. The model used for smoothing is a Bayesian Intrinsic Conditional Autoregressive (ICAR) spatial model, implemented with Nimble \cite{nimble2021a}. 
 
-The selected Need to Test metric is $R*log_{10}(\frac{H}{N})$ where R is the mean radon level, H is the number of housing units, and N is the number of Radon tests, adjusted to reflect the expected number of tests per 10 year period. As this metric increases, it indicates a greater need to test. The values shown in Figure \ref{fig:utest1} are scaled so that the lowest value of the Need to Test metric in the U.S. is 0 and the largest value is 100, with need values above 25\% of the national maximum capped at 100 to prevent outliers from dominating the scale. This approach can help highlight areas which may have a higher need for testing than others, but there are substantial limitations, and policy should not be based on this document in isolation. In addition to the presence of unaccounted-for-small-scale variability within states, comparisons between states may be affected by differential
-data availability. In addition, the Need to Test metric presented here describes one of many possible prioritization schemes for trading off radon levels and testing rates. Alternative approaches may strike a different balance between these two measures, or prioritize high or low population areas. Direct interpretation of the units presented here is also limited, and is intended to support relative comparisons. 
+The selected Testing Disparity metric is $R*log_{10}(\frac{H}{N})$ where R is the mean radon level, H is the number of housing units, and N is the number of Radon tests, adjusted to reflect the expected number of tests per 10 year period. The lower the testing rate, $\frac{N}{H}$, and the higher the mean radon level, the higher this metric will be, suggesting that increased attention to testing could be valuable in such counties. However, radon testing in other counties, even those at the bottom of the scale, remains much in need. The values shown in Figure \ref{fig:utest1} are scaled so that the lowest value of the Testing Disparity metric in the U.S. is 0 and the largest value is 100, with values above 25\% of the national maximum capped at 100 to prevent outliers from dominating the scale. This approach can help highlight areas which may benefit more from attention to testing than others, but there are substantial limitations, and policy should not be based on this document in isolation. In addition to the presence of unaccounted-for small-scale variability within states, comparisons between states may be affected by differential
+data availability. In addition, the Testing Disparity metric presented here describes one of many possible prioritization schemes for trading off radon levels and testing rates. Alternative approaches may strike a different balance between these two measures, or prioritize high or low population areas. Direct interpretation of the units presented here is also limited, and is intended to support relative comparisons within each respective state. 
 
 
 \pagebreak
@@ -448,11 +466,11 @@ CurRank <- filter(SmoothNeedTable, NAME == State)
 ## Making table
 kbl(SmoothNeedTable, format = "latex", 
                   col.names = linebreak(c("State", "Rank", 
-                                   "Weighted Average\nSmoothed Need to Test",
+                                   "Weighted Average\nSmoothed Testing Disparity",
                                                "Estimated Mean\nRadon Level", 
-                                               "Households",
+                                               "Housing Units",
                                                "Radon Tests\n (10 years)",
-                                               "Radon Tests per\n1,000 Households")), 
+                                               "Radon Tests per\n1,000 Housing Units")), 
     escape = F,align=c("l", "r", "r", "r", "r", "r","r"), 
     caption="State-level summary data. Note: Hawaii and Mississippi are excluded due to lack of data.") |>
   kable_styling(latex_options = c("hold_position", "scale_down"), full_width = FALSE) |>
@@ -489,7 +507,8 @@ This section contains additional maps which may be of interest, including raw (n
   \end{minipage}  
   \begin{minipage}[b]{0.38\linewidth}
   \includegraphics[width=\linewidth]{RawNeedToTest.pdf}
-  \caption{Raw Need to Test metric (unscaled) by county.}
+    \caption{Raw Testing Disparity metric (unscaled) by county.\small\textsuperscript{*}}
+\small\textsuperscript{*} All homes and buildings should be tested for radon. 
   \end{minipage}
   \hfill
   \begin{minipage}[b]{0.38\linewidth}
@@ -502,7 +521,7 @@ This section contains additional maps which may be of interest, including raw (n
 
 \section{Disclaimer}
 
-This document was prepared on behalf of the American Lung Association by researchers at the University of Iowa. This project has been funded wholly or in part by the United States Environmental Protection Agency under assistance agreement 83924601 to the American Lung Association. The data presented here were provided by the United States Centers for Disease Control and the U.S. Census Bureau. The summaries and text presented here was not endorsed or approved by the EPA, CDC, or Census Bureau. 
+This document was prepared on behalf of the American Lung Association by researchers at the University of Iowa. This project has been funded wholly or in part by the United States Environmental Protection Agency under assistance agreement 84021001 to the American Lung Association. The data presented here were provided by the United States Centers for Disease Control and the U.S. Census Bureau. The contents of this document do not necessarily reflect the views and policies of EPA, CDC or Census Bureau. 
 
 
 \pagebreak
