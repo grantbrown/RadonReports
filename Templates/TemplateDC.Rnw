@@ -124,7 +124,7 @@ cat(paste0("\\textbf{Radon Testing Disparities: ", State, "}\\\\"))
        \vspace{0.5cm}
       {\large{ 
  <<echo = FALSE, results = "asis">>=     
-cat(paste0("Radon and Radon Testing in the State of ", State, "\\\\"))
+cat(paste0("Radon and Radon Testing in ", State, "\\\\"))
 
 @
 	      }}   
@@ -174,7 +174,7 @@ cat(paste0(" The study period for ", State, " was from ", Temporal, "."))
 
 \section{Using This Document}
 
-Public health professionals interested primarily in the large scale distribution of radon levels in their state should focus on Figure \ref{fig:means}. Those interested in testing rates should focus on Figure \ref{fig:testrate}. For a combined measure that highlights relatively fewer tests and also higher radon levels, Figure \ref{fig:utest1} gives a summary. In all cases, caution is required in interpreting the results due to the issues highlighted in Section \ref{sec:technotessec}.
+Public health professionals may be interested in mean radon levels, testing rates, or a combined measure that highlights relatively fewer tests and also higher radon levels gives a summary. In all cases, caution is required in interpreting the results due to the issues highlighted in Section \ref{sec:technotessec}. In addition, the District of Colombia does not have counties over which the distribution of these quantities can be compared, so it may be of interest to compare to other state reports. 
 
 
 <<echo = FALSE, results = "asis">>=
@@ -202,13 +202,6 @@ cat(paste0("\\item ", "Overall, ",State,
 
 @ 
 
-<<echo = FALSE, results = "asis">>=
-
-cat(paste0("\\item ", State, 
-           " has a Testing Disparity metric value of ", 
-           round(Data$RawNeed, digits = 1), "."))
-
-@ 
 \end{itemize}
 
 \section{Technical Notes}
